@@ -1,4 +1,6 @@
 pom.xml
-*jar
+*.jar
 lib
 classes
+
+*~
