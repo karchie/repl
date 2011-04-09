@@ -1,17 +1,9 @@
-# leinrepl
+# repl
 
-FIXME: write description
-
-## Usage
-
-FIXME: write
-
-## Installation
-
-FIXME: write
+This is Kevin's REPL for doing small jobs
 
 ## License
 
-Copyright (C) 2010 FIXME
+Copyright (C) 2010,2011 Washington University
 
 Distributed under the Eclipse Public License, the same as Clojure.

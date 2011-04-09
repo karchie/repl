@@ -1,5 +1,5 @@
-(defproject leinrepl "1.0.0-SNAPSHOT"
-  :description "Leiningen-managed Clojure REPL"
+(defproject repl "0.0.1"
+  :description "Kevin's Clojure REPL for small jobs"
   :dependencies [[org.clojure/clojure "1.2.0"]
                  [org.clojure/clojure-contrib "1.2.0"]
 		 [dcm4che/dcm4che-core "2.0.24"]
