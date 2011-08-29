@@ -9,17 +9,18 @@
 
 (def visit-ids (ref {}))
 
-(defn get-unused-id [m & {:keys [id-format first-index]
-			    :or {id-format "v%03d"
-				 first-index 0}}]
-  "Find the first unused id for the given id, incrementing
-the index as needed.  Default format produces ids starting
-at v000."
+(defn get-unused-id
+  "Find the first unused id for the given id, drawing
+indices from the given sequence. Default format produces
+ids v000, v001, v002, ..."
+  [m & {:keys [id-format index-seq]
+	:or {id-format "v%03d"
+	     index-seq (range)}}]
   (loop [ids (apply hash-set (vals m))
-	 i first-index]
-    (let [id (format id-format i)]
+	 index-seq index-seq]
+    (let [id (format id-format (first index-seq))]
       (if (contains? ids id)
-	(recur ids (inc i))
+	(recur ids (rest index-seq))
 	id))))
 
 (deftest get-unused-id-test
