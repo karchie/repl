@@ -33,12 +33,11 @@ at v000."
   "Given the query parameters id and date in the parameter map,
 return a visit ID."
   (dosync
-   (let [visit (get-in @visit-ids [id date])]
-     (if visit
-       visit
-       (let [visit (get-unused-id (get @visit-ids id))]
-	 (ref-set visit-ids (assoc-in @visit-ids [id date] visit))
-	 visit)))))
+   (if-let [visit (get-in @visit-ids [id date])]
+     visit
+     (let [visit (get-unused-id (get @visit-ids id))]
+       (ref-set visit-ids (assoc-in @visit-ids [id date] visit))
+       visit))))
 
 (deftest params->id-test
   (binding [visit-ids (ref {})]
