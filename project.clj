@@ -1,6 +1,6 @@
 (defproject repl "0.0.1"
   :description "Kevin's Clojure REPL for small jobs"
-  :dependencies [[org.clojure/clojure "1.2.1"]
+  :dependencies [[org.clojure/clojure "1.3.0-beta2"]
                  [org.clojure/clojure-contrib "1.2.0"]
 		 [dcm4che/dcm4che-core "2.0.24"]
 		 [org.nrg/log4jr-client "0.1.0"]

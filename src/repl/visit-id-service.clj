@@ -7,7 +7,7 @@
 	    [compojure.handler :as handler]
 	    [hiccup.core :as h]))
 
-(def visit-ids (ref {}))
+(def ^:dynamic *visit-ids* (ref {}))
 
 (defn get-unused-id
   "Find the first unused id for the given id, drawing
@@ -34,14 +34,14 @@ ids v000, v001, v002, ..."
   "Given the query parameters id and date in the parameter map,
 return a visit ID."
   (dosync
-   (if-let [visit (get-in @visit-ids [id date])]
+   (if-let [visit (get-in @*visit-ids* [id date])]
      visit
-     (let [visit (get-unused-id (get @visit-ids id))]
-       (ref-set visit-ids (assoc-in @visit-ids [id date] visit))
+     (let [visit (get-unused-id (get @*visit-ids* id))]
+       (ref-set *visit-ids* (assoc-in @*visit-ids* [id date] visit))
        visit))))
 
 (deftest params->id-test
-  (binding [visit-ids (ref {})]
+  (binding [*visit-ids* (ref {})]
     (is (= "v000" (params->id {:id "s01" :date "20110810"})))
     (is (= "v000" (params->id {:id "s01" :date "20110810"})))
     (is (= "v000" (params->id {:id "s02" :date "20110811"})))
