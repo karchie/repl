@@ -67,8 +67,8 @@ and uncompresses the contents inline."
        (let [name (if (instance? File f) (.getName f) f)]
 	 (if (.endsWith name gzip-suffix)
 	   (with-open [in-gzs (GZIPInputStream. in-s)]
-	     (stream->dicom-object in-gzs))
-	   (stream->dicom-object in-s)))))
+	     (stream->dicom-object in-gzs max-tag))
+	   (stream->dicom-object in-s max-tag)))))
   ([f] (file->dicom-object f nil)))
 
 (defn obj-seq
