@@ -1,10 +1,9 @@
 (ns #^{:doc "Test log4jr server"
        :author "Kevin A. Archie <karchie@wustl.edu>"}
   nrg.log4jr
-  (:import org.nrg.log4j.PostAppender
-	   org.apache.log4j.spi.LoggingEvent
-	   org.apache.log4j.Logger
-	   org.apache.log4j.Level))
+  (:import (org.nrg.log4j PostAppender)
+	   (org.apache.log4j.spi LoggingEvent)
+	   (org.apache.log4j Logger Level)))
 
 (defn test-server [url & {:keys [message logger throwable]
 			  :or {message "Hi there"
