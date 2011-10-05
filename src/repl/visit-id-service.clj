@@ -37,7 +37,7 @@ return a visit ID."
    (if-let [visit (get-in @*visit-ids* [id date])]
      visit
      (let [visit (get-unused-id (get @*visit-ids* id))]
-       (ref-set *visit-ids* (assoc-in @*visit-ids* [id date] visit))
+       (alter *visit-ids* assoc-in [id date] visit)
        visit))))
 
 (deftest params->id-test
