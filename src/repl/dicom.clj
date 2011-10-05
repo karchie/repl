@@ -1,22 +1,20 @@
 (ns #^{:doc "Manipulate DICOM files"
        :author "Kevin A. Archie <karchie@wustl.edu>"}
   nrg.dicom
-  (:import (java.io
-	    BufferedInputStream
-	    File
-	    FileInputStream
-	    InputStream
-	    IOException)
+  (:import (java.io BufferedInputStream
+		    File
+		    FileInputStream
+		    InputStream
+		    IOException)
 	   (java.util.zip GZIPInputStream)
-	   (org.dcm4che2.data
-	    DicomObject
-	    Tag
-	    UID)
-	   (org.dcm4che2.io
-	    DicomInputStream
-	    DicomOutputStream
-	    StopTagInputHandler))
-  (:require [clojure.string :as string]))
+	   (org.dcm4che2.data DicomObject
+			      Tag
+			      UID)
+	   (org.dcm4che2.io DicomInputStream
+			    DicomOutputStream
+			    StopTagInputHandler))
+  (:require [clojure.string :as string])
+  (:use clojure.test))
 
 
 (def
@@ -27,13 +25,19 @@
 (defn- make-caused-IOException
   "Creates an IOException with the given cause."
   ([cause]
-     (let [e (IOException.)]
-       (.initCause e cause)
-       e))
+     (doto (IOException.)
+       (.initCause cause)))
   ([cause message]
-     (let [e (IOException. message)]
-       (.initCause e cause)
-       e)))
+     (doto (IOException. message)
+       (.initCause cause))))
+
+(deftest make-caused-IOException-test
+  (let [cause (Exception.)]
+    (is (nil? (.getCause (IOException.))))
+    (is (= cause
+	   (.getCause (make-caused-IOException cause))))
+    (is (= cause
+	   (.getCause (make-caused-IOException cause "oh no!"))))))
 
 (defn stream->dicom-object
   "Reads a DICOM object from an InputStream."
@@ -42,8 +46,9 @@
 	 [buf-in-s (BufferedInputStream. in-s)
 	  dicom-in-s (DicomInputStream. buf-in-s)]
        (when-not (nil? max-tag)
-	 (.setHandler dicom-in-s (StopTagInputHandler.
-				  (inc (max max-tag Tag/SOPClassUID)))))
+	 (.setHandler dicom-in-s
+		      (StopTagInputHandler.
+		       (inc (max max-tag Tag/SOPClassUID)))))
        (try
 	(let [dicom-o (.readDicomObject dicom-in-s)]
 	  (cond (.contains dicom-o Tag/FileMetaInformationVersion)
@@ -86,8 +91,8 @@ from a sequence of files."
   ([fs] (obj-seq fs nil)))
 
 (defn make-headerless-copy
-  "Make headerless copies of all the given DICOM files (or all DICOM
-files in the given directory)"
+  "Make headerless copies of all the given DICOM files in the
+directory named to-path."
   [files to-path]
   (let [to-dir (File. to-path)]
     (.mkdir to-dir)
