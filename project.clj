@@ -9,4 +9,7 @@
 		 [org.slf4j/slf4j-log4j12 "1.6.1"]
 		 [compojure "0.6.4"]
 		 [hiccup "0.3.6"]]
+  :repositories {"dcm4che" {:url "http://www.dcm4che.org/maven2"
+                            :snapshots false
+                            :releases true}}
   :dev-dependencies [[ring-serve "0.1.1"]])
