@@ -16,11 +16,10 @@
   (:require [clojure.string :as string])
   (:use clojure.test))
 
-
 (def
- #^{:private true
-    :doc "Files with this suffix are assumed to be gzip compressed."}
- gzip-suffix ".gz")
+  #^{:private true
+     :doc "Files with this suffix are assumed to be gzip compressed."}
+  gzip-suffix ".gz")
 
 (defn- make-caused-IOException
   "Creates an IOException with the given cause."
@@ -39,7 +38,7 @@
     (is (= cause
 	   (.getCause (make-caused-IOException cause "oh no!"))))))
 
-(defn stream->dicom-object
+(defn read-stream
   "Reads a DICOM object from an InputStream."
   ([in-s max-tag]
      (with-open
@@ -50,20 +49,17 @@
 		      (StopTagInputHandler.
 		       (inc (max max-tag Tag/SOPClassUID)))))
        (try
-	(let [dicom-o (.readDicomObject dicom-in-s)]
-	  (cond (.contains dicom-o Tag/FileMetaInformationVersion)
-		dicom-o			; looks part 10 compliant
-		(.contains dicom-o Tag/SOPClassUID)
-		dicom-o			; has SOP Class UID
-		:else
-		(throw (IOException. "not a valid DICOM object"))))
-	(catch IOException e (throw e))
-	(catch Throwable e
-	  (throw (make-caused-IOException
-		  e "Not a DICOM file, or an error occurred"))))))
-  ([in-s] (stream->dicom-object in-s nil)))
+         (doto (.readDicomObject dicom-in-s)
+           (when-not (or (.contains Tag/FileMetaInformationVersion)
+                         (.contains Tag/SOPClassUID))
+             (throw (IOException. "not a valid DICOM object"))))
+         (catch IOException e (throw e))
+         (catch Throwable e
+           (throw (make-caused-IOException
+                   e "Not a DICOM file, or an error occurred"))))))
+  ([in-s] (read-stream in-s nil)))
 
-(defn file->dicom-object
+(defn read-file
   "Reads a DICOM object from a file; f may be a File or String
 filename. If the filename ends in .gz, assumes it is gzip compressed
 and uncompresses the contents inline."
@@ -72,9 +68,9 @@ and uncompresses the contents inline."
        (let [name (if (instance? File f) (.getName f) f)]
 	 (if (.endsWith name gzip-suffix)
 	   (with-open [in-gzs (GZIPInputStream. in-s)]
-	     (stream->dicom-object in-gzs max-tag))
-	   (stream->dicom-object in-s max-tag)))))
-  ([f] (file->dicom-object f nil)))
+	     (read-stream in-gzs max-tag))
+	   (read-stream in-s max-tag)))))
+  ([f] (read-file f nil)))
 
 (defn obj-seq
   "Generates a lazy sequence of [File, DICOM object] vectors
@@ -83,7 +79,7 @@ from a sequence of files."
      (if (seq fs)
        (lazy-seq
 	(let [f (first fs)]
-	  (try (cons [f (file->dicom-object f max-tag)]
+	  (try (cons [f (read-file f max-tag)]
 		     (obj-seq (rest fs) max-tag))
 	       (catch Throwable t
 		 (obj-seq (rest fs) max-tag)))))
