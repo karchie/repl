@@ -44,7 +44,7 @@
      (with-open
 	 [buf-in-s (BufferedInputStream. in-s)
 	  dicom-in-s (DicomInputStream. buf-in-s)]
-       (when-not (nil? max-tag)
+       (when max-tag
 	 (.setHandler dicom-in-s
 		      (StopTagInputHandler.
 		       (inc (max max-tag Tag/SOPClassUID)))))
