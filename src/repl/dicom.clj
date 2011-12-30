@@ -41,22 +41,23 @@
 (defn read-stream
   "Reads a DICOM object from an InputStream."
   ([in-s max-tag]
-     (with-open
-	 [buf-in-s (BufferedInputStream. in-s)
-	  dicom-in-s (DicomInputStream. buf-in-s)]
-       (when max-tag
-	 (.setHandler dicom-in-s
-		      (StopTagInputHandler.
-		       (inc (max max-tag Tag/SOPClassUID)))))
-       (try
-         (doto (.readDicomObject dicom-in-s)
-           (when-not (or (.contains Tag/FileMetaInformationVersion)
-                         (.contains Tag/SOPClassUID))
-             (throw (IOException. "not a valid DICOM object"))))
-         (catch IOException e (throw e))
-         (catch Throwable e
-           (throw (make-caused-IOException
-                   e "Not a DICOM file, or an error occurred"))))))
+     (io!
+      (with-open
+          [buf-in-s (BufferedInputStream. in-s)
+           dicom-in-s (DicomInputStream. buf-in-s)]
+        (when max-tag
+          (.setHandler dicom-in-s
+                       (StopTagInputHandler.
+                        (inc (max max-tag Tag/SOPClassUID)))))
+        (try
+          (doto (.readDicomObject dicom-in-s)
+            (when-not (or (.contains Tag/FileMetaInformationVersion)
+                          (.contains Tag/SOPClassUID))
+              (throw (IOException. "not a valid DICOM object"))))
+          (catch IOException e (throw e))
+          (catch Throwable e
+            (throw (make-caused-IOException
+                    e "Not a DICOM file, or an error occurred")))))))
   ([in-s] (read-stream in-s nil)))
 
 (defn read-file
@@ -64,12 +65,13 @@
 filename. If the filename ends in .gz, assumes it is gzip compressed
 and uncompresses the contents inline."
   ([f max-tag]
-     (with-open [in-s (FileInputStream. f)]
-       (let [name (if (instance? File f) (.getName f) f)]
-	 (if (.endsWith name gzip-suffix)
-	   (with-open [in-gzs (GZIPInputStream. in-s)]
-	     (read-stream in-gzs max-tag))
-	   (read-stream in-s max-tag)))))
+     (io!
+      (with-open [in-s (FileInputStream. f)]
+        (let [name (if (instance? File f) (.getName f) f)]
+          (if (.endsWith name gzip-suffix)
+            (with-open [in-gzs (GZIPInputStream. in-s)]
+              (read-stream in-gzs max-tag))
+            (read-stream in-s max-tag))))))
   ([f] (read-file f nil)))
 
 (defn obj-seq
@@ -78,24 +80,25 @@ from a sequence of files."
   ([fs max-tag]
      (if (seq fs)
        (lazy-seq
-	(let [f (first fs)]
-	  (try (cons [f (read-file f max-tag)]
+	(let [f (first fs)
+              file (if (instance? File f) f (File. f))]
+	  (try (cons [file (read-file file max-tag)]
 		     (obj-seq (rest fs) max-tag))
 	       (catch Throwable t
 		 (obj-seq (rest fs) max-tag)))))
        '()))
   ([fs] (obj-seq fs nil)))
 
-(defn make-headerless-copy
-  "Make headerless copies of all the given DICOM files in the
-directory named to-path."
-  [files to-path]
-  (let [to-dir (File. to-path)]
-    (.mkdir to-dir)
-    (doseq [[f o] (obj-seq files)
-	    :let [name (string/replace (.getName f) #"\.gz$" "")
-		  of (File. to-dir name)]]
-      (with-open [out-s (DicomOutputStream. of)]
-	(.writeDataset out-s (.dataset o)
-		       (.getString o Tag/TransferSyntaxUID
-				   UID/ImplicitVRLittleEndian))))))
+(defn make-headerless-copy!
+  "Make headerless copy of the given DICOM files (paths or Files)
+into the provided directory."
+  [to-dir & files]
+  (io!
+   (.mkdir to-dir)
+   (doseq [[f o] (obj-seq files)
+           :let [name (string/replace (.getName f) #"\.gz$" "")
+                 of (File. to-dir name)]]
+     (with-open [out-s (DicomOutputStream. of)]
+       (.writeDataset out-s (.dataset o)
+                      (.getString o Tag/TransferSyntaxUID
+                                  UID/ImplicitVRLittleEndian))))))
