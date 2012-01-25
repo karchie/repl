@@ -116,16 +116,18 @@ into the provided directory."
 (defn verify-service
   "Use C-ECHO to ping an SCP n times. Returns a sequence of length
 n, representing the time in ms of each C-ECHO operation."
-  [n scp-ae-title & {:keys [device-name
-                            hostname
-                            interval
-                            port
-                            scu-ae-title]
-                     :or {device-name "cljecho"
-                          hostname "localhost"
-                          interval 0
-                          port "104"
-                          scu-ae-title "dcm4clj"}}]
+  [scp-ae-title & {:keys [count
+                          device-name
+                          hostname
+                          interval
+                          port
+                          scu-ae-title]
+                   :or {count 1
+                        device-name "cljecho"
+                        hostname "localhost"
+                        interval 0
+                        port 104
+                        scu-ae-title "dcm4clj"}}]
   (let [nc (NetworkConnection.)
         ae (doto (NetworkApplicationEntity.)
              (.setNetworkConnection nc)
@@ -148,7 +150,7 @@ n, representing the time in ms of each C-ECHO operation."
         assoc (.connect ae remote-ae executor-service)]
     (try
       (doall
-       (for [i (range 0 n)
+       (for [i (range count)
              :let [t (System/currentTimeMillis)]]
          (do 
            (Thread/sleep interval)
@@ -156,5 +158,3 @@ n, representing the time in ms of each C-ECHO operation."
            (- (System/currentTimeMillis) t))))
       (finally
        (.release assoc true)))))
-          
-    
