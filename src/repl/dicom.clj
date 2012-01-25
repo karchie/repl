@@ -6,13 +6,18 @@
 		    FileInputStream
 		    InputStream
 		    IOException)
+           (java.util.concurrent Executors)
 	   (java.util.zip GZIPInputStream)
 	   (org.dcm4che2.data DicomObject
 			      Tag
 			      UID)
 	   (org.dcm4che2.io DicomInputStream
 			    DicomOutputStream
-			    StopTagInputHandler))
+			    StopTagInputHandler)
+           (org.dcm4che2.net Device
+                             NetworkApplicationEntity
+                             NetworkConnection
+                             TransferCapability))
   (:require [clojure.string :as string])
   (:use clojure.test))
 
@@ -102,3 +107,52 @@ into the provided directory."
        (.writeDataset out-s (.dataset o)
                       (.getString o Tag/TransferSyntaxUID
                                   UID/ImplicitVRLittleEndian))))))
+
+(def ^{:private true} verification-scu-transfer-capability
+  (TransferCapability. UID/VerificationSOPClass
+                       (into-array [UID/ImplicitVRLittleEndian])
+                       TransferCapability/SCU))
+
+(defn verify-service
+  "Use C-ECHO to ping an SCP n times."
+  [n scp-ae-title & {:keys [device-name
+                            hostname
+                            interval
+                            port
+                            scu-ae-title]
+                     :or {device-name "cljecho"
+                          hostname "localhost"
+                          interval 0
+                          port "104"
+                          scu-ae-title "dcm4clj"}}]
+  (let [nc (NetworkConnection.)
+        ae (doto (NetworkApplicationEntity.)
+             (.setNetworkConnection nc)
+             (.setAssociationInitiator true)
+             (.setAETitle scu-ae-title)
+             (.setTransferCapability
+              (into-array [verification-scu-transfer-capability])))
+        remote-nc (doto (NetworkConnection.)
+                    (.setHostname hostname)
+                    (.setPort port))
+        remote-ae (doto (NetworkApplicationEntity.)
+                    (.setAETitle scp-ae-title)
+                    (.setInstalled true)
+                    (.setAssociationAcceptor true)
+                    (.setNetworkConnection remote-nc))
+        device (doto (Device. device-name)
+                 (.setNetworkApplicationEntity ae)
+                 (.setNetworkConnection nc))
+        executor-service (Executors/newCachedThreadPool)
+        assoc (.connect ae remote-ae executor-service)]
+    (println "C-ECHO" (str scp-ae-title "@" hostname ":" port))
+    (try
+      (dotimes [i n]
+        (let [t (System/currentTimeMillis)]
+          (.. assoc (cecho) (next))
+          (printf "%4d - %4d ms\n" i (- (System/currentTimeMillis) t))
+          (Thread/sleep interval)))
+      (finally
+       (.release assoc true)))))
+          
+    
