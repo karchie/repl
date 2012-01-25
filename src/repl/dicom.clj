@@ -148,12 +148,12 @@ n, representing the time in ms of each C-ECHO operation."
         assoc (.connect ae remote-ae executor-service)]
     (try
       (doall
-       (for [i (range 0 n)]
+       (for [i (range 0 n)
+             :let [t (System/currentTimeMillis)]]
          (do 
            (Thread/sleep interval)
-           (let [t (System/currentTimeMillis)]
-             (.. assoc (cecho) (next))
-             (- (System/currentTimeMillis) t)))))
+           (.. assoc (cecho) (next))
+           (- (System/currentTimeMillis) t))))
       (finally
        (.release assoc true)))))
           
