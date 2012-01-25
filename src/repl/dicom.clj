@@ -114,7 +114,8 @@ into the provided directory."
                        TransferCapability/SCU))
 
 (defn verify-service
-  "Use C-ECHO to ping an SCP n times."
+  "Use C-ECHO to ping an SCP n times. Returns a sequence of length
+n, representing the time in ms of each C-ECHO operation."
   [n scp-ae-title & {:keys [device-name
                             hostname
                             interval
@@ -145,13 +146,14 @@ into the provided directory."
                  (.setNetworkConnection nc))
         executor-service (Executors/newCachedThreadPool)
         assoc (.connect ae remote-ae executor-service)]
-    (println "C-ECHO" (str scp-ae-title "@" hostname ":" port))
     (try
-      (dotimes [i n]
-        (let [t (System/currentTimeMillis)]
-          (.. assoc (cecho) (next))
-          (printf "%4d - %4d ms\n" i (- (System/currentTimeMillis) t))
-          (Thread/sleep interval)))
+      (doall
+       (for [i (range 0 n)]
+         (do 
+           (Thread/sleep interval)
+           (let [t (System/currentTimeMillis)]
+             (.. assoc (cecho) (next))
+             (- (System/currentTimeMillis) t)))))
       (finally
        (.release assoc true)))))
           
