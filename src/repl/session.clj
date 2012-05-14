@@ -15,7 +15,7 @@
        :author "Kevin A. Archie <karchie@wustl.edu>"}
   nrg.session
   (:import (java.io File))
-  (:use [clojure.contrib.string :only (join)]))
+  (:use [clojure.string :only (join)]))
 
 (defn extract-name-fields
   [filename]
