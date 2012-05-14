@@ -10,7 +10,8 @@
 	   (java.util.zip GZIPInputStream)
 	   (org.dcm4che2.data DicomObject
 			      Tag
-			      UID)
+			      UID
+                              VR)
 	   (org.dcm4che2.io DicomInputStream
 			    DicomOutputStream
 			    StopTagInputHandler)
@@ -94,6 +95,15 @@ from a sequence of files."
        '()))
   ([fs] (obj-seq fs nil)))
 
+(def
+  #^{:private true
+     :doc "Dummy DicomObject for getting tag names"}
+  empty-dicom-object (org.dcm4che2.data.BasicDicomObject.))
+
+(defn tag-name [tag]
+  "Returns the name of the provided tag."
+  (.nameOf empty-dicom-object tag))
+   
 (defn make-headerless-copy!
   "Make headerless copy of the given DICOM files (paths or Files)
 into the provided directory."
@@ -158,3 +168,111 @@ n, representing the time in ms of each C-ECHO operation."
            (- (System/currentTimeMillis) t))))
       (finally
        (.release assoc true)))))
+
+
+(declare to-map)
+
+(defn to-seq [dicom-element specific-charset cache?]
+  "Extract the value of the provided DicomElement into a sequence
+of suitable JVM representations."
+  (let [vr (.vr dicom-element)]
+    (seq (condp contains? vr
+           #{VR/AE VR/AS VR/CS VR/DS VR/IS VR/LO VR/LT VR/PN VR/SH
+             VR/ST VR/UI VR/UT}
+           (.getStrings dicom-element specific-charset cache?)
+             
+           #{VR/AT VR/SL VR/SS VR/UL VR/US}
+           (.getInts dicom-element cache?)
+               
+           #{VR/DA VR/DT VR/TM}
+           (.getDates dicom-element cache?)
+
+           #{VR/FL VR/OF}
+           (.getFloats dicom-element cache?)
+
+           #{VR/FD}
+           (.getDoubles dicom-element cache?)
+           
+           #{VR/OB VR/OW VR/UN}
+           (.getBytes dicom-element)
+           
+           #{VR/SQ} (map to-map
+                      (for [i (range (.countItems dicom-element))]
+                        (.getDicomObject dicom-element i)))))))
+
+                                     
+(defn to-map [dicom-object & {:keys [cache-elems]
+                              :or {cache-elems false}}]
+  "Turn the provided DicomObject into a map. Any contained DICOM
+sequences will be converted to sequences, possibly containing nested
+maps."
+  (let [specific-charset (.getSpecificCharacterSet dicom-object)]
+    (into {} (map #(vector (.tag %)
+                           (to-seq % specific-charset cache-elems))
+                  (iterator-seq (.iterator dicom-object))))))
+  
+
+(defn push-to-instance [m k]
+  (alter (m :level) assoc k :instance))
+
+(defn push-from-study [m new-v-series k prev-v new-v]
+  {:pre [(= (@(m :level) k) :study)]}
+  (doseq [study (keys @(m :study-vals))]
+    (alter (@(m :study-vals) study) dissoc k))
+  (if (@(m :series-uids) new-v-series)
+    (push-to-instance m k)
+    (do
+      (alter (m :level) assoc k :series)
+      (alter (m :series-vals) assoc new-v-series (ref {k new-v}))
+      (doseq [to-series (keys @(m :series-vals))]
+        (alter (@(m :series-vals) to-series) assoc k prev-v)))))
+
+(defn push-from-series [m k]
+  (doseq [series (keys @(m :series-vals))]
+    (alter (@(m :series-vals) series) dissoc k))
+  (push-to-instance m k))
+
+(defn insert-kv [m study series k v]
+  (case (@(m :level) k)
+    :study (if (contains? @(m :study-vals) study)
+             (if-let [prev-v (@(@(m :study-vals) study) k)]
+               (when-not (= v prev-v)
+                 (push-from-study m series k prev-v v))
+               (alter (@(m :study-vals) study) assoc k v))
+             (alter (m :study-vals) assoc study (ref {k v})))
+    
+    :series (if (contains? @(m :series-vals) series)
+              (if-let [prev-v (@(@(m :series-vals) series) k)]
+                (when-not (= v prev-v)
+                  (push-from-series m k))
+                (alter (@(m :study-vals) study) assoc k v))
+              (alter (m :series-vals) assoc series (ref {k v})))
+    
+    :instance true
+    
+    nil (do
+          (alter (m :level) assoc k :study)
+          (insert-kv m study series k v))))
+
+
+(defn into-summary [summary dcmo-map]
+  {:pre [(= 1 (count (dcmo-map Tag/StudyInstanceUID)))
+         (= 1 (count (dcmo-map Tag/SeriesInstanceUID)))
+         (= 1 (count (dcmo-map Tag/SOPInstanceUID)))]}
+  (let [study-uid (first (dcmo-map Tag/StudyInstanceUID))
+        series-uid (first (dcmo-map Tag/SeriesInstanceUID))]
+    
+    (doseq [[k v] dcmo-map]
+      (dosync
+       (insert-kv summary study-uid series-uid k v)))
+    (dosync
+     (alter (summary :series-uids) conj series-uid)))
+  summary)
+
+(defn summarize-attribute-levels [& roots]
+  (let [summary {:level (ref {}) :study-vals (ref {})
+                 :series-vals (ref {}) :series-uids (ref #{})}]
+    (doseq [root roots
+            [f dcmo] (obj-seq (file-seq (File. root)) (dec Tag/PixelData))]
+      (into-summary summary (to-map dcmo)))
+    summary))
