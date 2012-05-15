@@ -246,7 +246,7 @@ maps."
               (if-let [prev-v (@(@(m :series-vals) series) k)]
                 (when-not (= v prev-v)
                   (push-from-series m k))
-                (alter (@(m :study-vals) study) assoc k v))
+                (alter (@(m :series-vals) series) assoc k v))
               (alter (m :series-vals) assoc series (ref {k v})))
     
     :instance true
