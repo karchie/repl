@@ -56,10 +56,11 @@
                        (StopTagInputHandler.
                         (inc (max max-tag Tag/SOPClassUID)))))
         (try
-          (doto (.readDicomObject dicom-in-s)
-            (when-not (or (.contains Tag/FileMetaInformationVersion)
-                          (.contains Tag/SOPClassUID))
-              (throw (IOException. "not a valid DICOM object"))))
+          (let [obj (.readDicomObject dicom-in-s)]
+            (when-not (or (.contains obj Tag/FileMetaInformationVersion)
+                          (.contains obj Tag/SOPClassUID))
+              (throw (IOException. "not a valid DICOM object")))
+            obj)
           (catch IOException e (throw e))
           (catch Throwable e
             (throw (make-caused-IOException
@@ -273,6 +274,8 @@ maps."
   (let [summary {:level (ref {}) :study-vals (ref {})
                  :series-vals (ref {}) :series-uids (ref #{})}]
     (doseq [root roots
-            [f dcmo] (obj-seq (file-seq (File. root)) (dec Tag/PixelData))]
+            [f dcmo] (obj-seq (filter #(.isFile %)
+                                      (file-seq (File. root)))
+                              (dec Tag/PixelData))]
       (into-summary summary (to-map dcmo)))
     summary))
