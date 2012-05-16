@@ -233,28 +233,27 @@ maps."
     (alter (@(m :series-vals) series) dissoc k))
   (push-to-instance m k))
 
+
+(defmacro insert-kv-level [m k v prev-v level & push-down-expr]
+  {:pre [(or (= (name level) "study") (= (name level) "series"))] }
+  (let [vals-key (keyword (str (name level) "-vals"))]
+    `(if (contains? @(~m ~vals-key) ~level)
+       (if-let [~prev-v (@(@(~m ~vals-key) ~level) ~k)]
+         (when-not (= ~v ~prev-v)
+           ~@push-down-expr)
+         (alter (@(~m ~vals-key) ~level) assoc ~k ~v))
+       (alter (~m ~vals-key) assoc ~level (ref {~k ~v})))))
+
 (defn insert-kv [m study series k v]
   (case (@(m :level) k)
-    :study (if (contains? @(m :study-vals) study)
-             (if-let [prev-v (@(@(m :study-vals) study) k)]
-               (when-not (= v prev-v)
-                 (push-from-study m series k prev-v v))
-               (alter (@(m :study-vals) study) assoc k v))
-             (alter (m :study-vals) assoc study (ref {k v})))
-    
-    :series (if (contains? @(m :series-vals) series)
-              (if-let [prev-v (@(@(m :series-vals) series) k)]
-                (when-not (= v prev-v)
-                  (push-from-series m k))
-                (alter (@(m :series-vals) series) assoc k v))
-              (alter (m :series-vals) assoc series (ref {k v})))
-    
+    :study (insert-kv-level m k v prev-v study
+                            (push-from-study m series k prev-v v))
+    :series (insert-kv-level m k v prev-v series
+                             (push-from-series m k))
     :instance true
-    
     nil (do
           (alter (m :level) assoc k :study)
           (insert-kv m study series k v))))
-
 
 (defn into-summary [summary dcmo-map]
   {:pre [(= 1 (count (dcmo-map Tag/StudyInstanceUID)))
@@ -262,7 +261,6 @@ maps."
          (= 1 (count (dcmo-map Tag/SOPInstanceUID)))]}
   (let [study-uid (first (dcmo-map Tag/StudyInstanceUID))
         series-uid (first (dcmo-map Tag/SeriesInstanceUID))]
-    
     (doseq [[k v] dcmo-map]
       (dosync
        (insert-kv summary study-uid series-uid k v)))
