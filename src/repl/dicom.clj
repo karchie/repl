@@ -19,7 +19,8 @@
                              NetworkApplicationEntity
                              NetworkConnection
                              TransferCapability))
-  (:require [clojure.string :as string])
+  (:require [clojure.string :as string]
+            [clojure.set])
   (:use clojure.test))
 
 (def
@@ -213,42 +214,60 @@ maps."
                   (iterator-seq (.iterator dicom-object))))))
   
 
-(defn push-to-instance [m k]
-  (alter (m :level) assoc k :instance))
+(defn push-to-instance [m k from-vals-key]
+  "Push the provided attribute down to the instance level and clear
+its value from the provided sequence of value maps."
+  {:pre [(or (= :study-vals from-vals-key)
+             (= :series-vals from-vals-key))]}
+  (alter (m :level) assoc k :instance)
+  (doseq [from-map (vals @(m from-vals-key))]
+    (alter from-map dissoc k)))
 
-(defn push-from-study [m new-v-series k prev-v new-v]
+(defn set-value-in-series [m series k v]
+  "Sets a key-value mapping for a series, creating a value map for that
+series or altering it if it already exists."
+  (if-let [series-vals (@(m :series-vals) series)]
+    (alter series-vals assoc k v)
+    (alter (m :series-vals) assoc series (ref {k v}))))
+
+(defn push-from-study [m new-v-series k new-v]
+  "The provided attribute k, previously at the study level, has a
+different value in the current object than has previously been seen in
+the current study, so push it down to series. If a previously inserted
+object is in the current series (as determined by checking
+series-study), then this series has multiple values for k so k is
+actually at the instance level."
   {:pre [(= (@(m :level) k) :study)]}
-  (doseq [study (keys @(m :study-vals))]
-    (alter (@(m :study-vals) study) dissoc k))
-  (if (@(m :series-uids) new-v-series)
-    (push-to-instance m k)
-    (do
-      (alter (m :level) assoc k :series)
-      (alter (m :series-vals) assoc new-v-series (ref {k new-v}))
-      (doseq [to-series (keys @(m :series-vals))]
-        (alter (@(m :series-vals) to-series) assoc k prev-v)))))
+  (if (@(m :series-study) new-v-series)
+    (push-to-instance m k :study-vals)
+    (dosync
+     (alter (m :level) assoc k :series)
+     (doseq [[to-series study] @(m :series-study)
+             :let [old-v (@(@(m :study-vals) study) k)]]
+       (set-value-in-series m to-series k old-v))
+     (set-value-in-series m new-v-series k new-v)
+     (doseq [study-vals (vals @(m :study-vals))]
+       (alter study-vals dissoc k)))))
 
 (defn push-from-series [m k]
-  (doseq [series (keys @(m :series-vals))]
-    (alter (@(m :series-vals) series) dissoc k))
-  (push-to-instance m k))
+  (push-to-instance m k :series-vals))
 
-
-(defmacro insert-kv-level [m k v prev-v level & push-down-expr]
+(defmacro insert-kv-level [m k v prev-v level level-key
+                           & push-down-expr]
   {:pre [(or (= (name level) "study") (= (name level) "series"))] }
   (let [vals-key (keyword (str (name level) "-vals"))]
-    `(if (contains? @(~m ~vals-key) ~level)
-       (if-let [~prev-v (@(@(~m ~vals-key) ~level) ~k)]
+    `(if (contains? @(~m ~vals-key) ~level-key)
+       (if-let [~prev-v (@(@(~m ~vals-key) ~level-key) ~k)]
          (when-not (= ~v ~prev-v)
            ~@push-down-expr)
-         (alter (@(~m ~vals-key) ~level) assoc ~k ~v))
-       (alter (~m ~vals-key) assoc ~level (ref {~k ~v})))))
+         (alter (@(~m ~vals-key) ~level-key) assoc ~k ~v))
+       (alter (~m ~vals-key) assoc ~level-key (ref {~k ~v})))))
 
 (defn insert-kv [m study series k v]
   (case (@(m :level) k)
-    :study (insert-kv-level m k v prev-v study
-                            (push-from-study m series k prev-v v))
-    :series (insert-kv-level m k v prev-v series
+    :study (insert-kv-level m k v prev-v :study study
+                            (push-from-study m series k v))
+    :series (insert-kv-level m k v prev-v :series series
                              (push-from-series m k))
     :instance true
     nil (do
@@ -264,13 +283,19 @@ maps."
     (doseq [[k v] dcmo-map]
       (dosync
        (insert-kv summary study-uid series-uid k v)))
+    (doseq [k (clojure.set/difference
+               (set (keys @(@(summary :study-vals) study-uid)))
+               (set (keys dcmo-map)))]
+      (push-from-study summary series-uid k @(summary :study-vals)))
     (dosync
-     (alter (summary :series-uids) conj series-uid)))
+     (alter (summary :series-study) assoc series-uid study-uid)))
   summary)
 
 (defn summarize-attribute-levels [& roots]
-  (let [summary {:level (ref {}) :study-vals (ref {})
-                 :series-vals (ref {}) :series-uids (ref #{})}]
+  (let [summary {:level (ref {})
+                 :study-vals (ref {})
+                 :series-vals (ref {})
+                 :series-study (ref {})}]
     (doseq [root roots
             [f dcmo] (obj-seq (filter #(.isFile %)
                                       (file-seq (File. root)))

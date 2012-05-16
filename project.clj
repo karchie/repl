@@ -1,4 +1,4 @@
-(defproject repl "0.0.2"
+(defproject repl "0.1.0"
   :description "Kevin's Clojure REPL for small jobs"
   :dependencies [[org.clojure/clojure "1.4.0"]
 		 [dcm4che/dcm4che-core "2.0.25"]
